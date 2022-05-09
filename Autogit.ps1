@@ -10,7 +10,7 @@
 PARAM (
 	[SWITCH]$Remote,
 	[Parameter(Mandatory=$TRUE)][STRING]$Method,
-	$Path=(Split-Path $PSScriptRoot),
+	$Path =(Get-Location),
 	[STRING]$Name,
 	[STRING]$Username,
 	[STRING]$Token,
@@ -83,7 +83,7 @@ FUNCTION Set-LocalRepository {
 			RETURN
 		}
 
-		"ShowStatus" {
+		"Status" {
 			$rep = Set-LocalRepository Get $Path
 
 			IF ( $rep.GitRepositoryInitialized ) {
@@ -108,11 +108,16 @@ FUNCTION Set-LocalRepository {
 			RETURN
 		}
 
-		"ShowStatusAll" { 
+		"StatusAll" { 
 			FOREACH ( $folder in Get-ChildItem $Path -Directory -Force ) {
 				Set-LocalRepository ShowStatus $folder
 			}
 			RETURN
+		}
+
+		"EnableAutogit" {
+			$expression = "New-Item ${Path}\.git\.autogit"
+			$operation = "Create `".autogit`" file in `".git`" directory"
 		}
 
 		"Upload" {
@@ -123,8 +128,10 @@ FUNCTION Set-LocalRepository {
 			}
 
 			IF ( -not $rep.GitRepositoryInitialized ) { 
-				Write-Host "Folder `"$($rep.Name)`" doesn't have an initialized local repository:"
-				Get-DirStats $Path
+				IF ( -not $Force ) {
+					Write-Host "Folder `"$($rep.Name)`" doesn't have an initialized local repository:"
+					Get-DirStats $Path
+				}
 				$result = Set-LocalRepository Create $Path -Force:$Force
 				$result | Out-Null
 				IF ( -not $result ) { 
@@ -132,6 +139,7 @@ FUNCTION Set-LocalRepository {
 					RETURN
 				}
 				$rep = Set-LocalRepository Get $Path
+				Write-Host ""
 			}
 			
 			IF ( -not $rep.Changes ) { 
@@ -140,8 +148,12 @@ FUNCTION Set-LocalRepository {
 			}
 			
 			IF ( -not $rep.AutoGitEnabled ) {
-				Write-Host "The repository `"$($rep.Name)`" doesn't have `".autogit`" file in `".git`" directory. Skipping..."
-				RETURN
+				Write-Host "The repository `"$($rep.Name)`" doesn't have `".autogit`" file in `".git`" directory."
+				IF ( $Force -or -not ( Set-LocalRepository EnableAutogit $Path ) ) { 
+					Write-Host "Skipping $($rep.Name)..." && Write-Host ""
+					RETURN
+				} 
+				Write-Host ""			
 			}
 
 			IF ( ( -not $rep.GitignoreExists ) -and ( -not $Force ) ) {
