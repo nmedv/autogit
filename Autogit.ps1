@@ -23,11 +23,12 @@ PARAM (
 FUNCTION Get-DirStats {
 
 	PARAM (
-		$Path
+		$Path,
+		[SWITCH]$Directory
 	)
 
 	$fso = New-Object -com Scripting.FileSystemObject
-	RETURN ( Get-ChildItem $Path -Force `
+	RETURN ( Get-ChildItem $Path -Force -Directory:$Directory `
 	| Select-Object @{l = 'Size'; e = { $fso.GetFolder($_.FullName).Size } }, Name `
 	| Format-Table @{l = 'Size [MB]'; e = { '{0:N2} ' -f ($_.Size / 1MB) } }, Name )
 }
@@ -83,6 +84,19 @@ FUNCTION Set-LocalRepository {
 			RETURN
 		}
 
+		"Commit" {
+			$expression = "cd ${Path} && git add . && git commit -m `"auto-commit`" && cd ${location}"
+			$operation = "Commit all changes in local repository"
+		}
+
+		"Delete" {
+			IF ( -not ( Test-Path "${Path}\.git" ) ) { 
+				RETURN "`"${Path}`" has no repository (.git doesn't exists). Nothing to delete." 
+			}
+			$expression = "Remove-Item -Recurse -Force `"${Path}\.git`""
+			$operation = "Delete local repository (.git directory)"
+		}
+
 		"Status" {
 			$rep = Set-LocalRepository Get $Path
 
@@ -117,59 +131,63 @@ FUNCTION Set-LocalRepository {
 
 		"CreateAutogit" {
 			$expression = "New-Item ${Path}\.git\.autogit"
-			$operation = "Create `".autogit`" file in `".git`" directory"
+			$operation = "Create .autogit file in .git directory"
 		}
 
 		"DeleteAutogit" {
 			$expression = "Remove-Item ${Path}\.git\.autogit"
-			$operation = "Delete `".autogit`" file from `".git`" directory"
+			$operation = "Delete .autogit file from .git directory"
 		}
 
-		"Upload" {
+		"PrepareUpload" {
 			$rep = Set-LocalRepository Get $Path
+
+			IF ( $rep.GitRepositoryInitialized ) { Write-Host "[$($rep.Name)]" } 
+			ELSE { Write-Host "`"$($rep.Name)`"" }
+	
 			IF ( -not $rep ) { 
-				Write-Host  "Can't get information about repository `"$($rep.Name)`""
+				Write-Host  "Can't get information about repository"
 				RETURN
 			}
 
 			IF ( -not $rep.GitRepositoryInitialized ) { 
 				IF ( -not $Force ) {
-					Write-Host "Folder `"$($rep.Name)`" doesn't have an initialized local repository:"
+					Write-Host "Folder doesn't have an initialized local repository:"
 					Get-DirStats $Path
 				}
 				$result = Set-LocalRepository Create $Path -Force:$Force
-				$result | Out-Null
+				$result
 				IF ( -not $result ) { 
-					Write-Host "Skipping `"$($rep.Name)`"..." && Write-Host ""
+					Write-Host "Skip..." && Write-Host ""
 					RETURN
 				}
 				$rep = Set-LocalRepository Get $Path
-				Write-Host ""
 			}
 			
 			IF ( -not $rep.Changes ) { 
-				Write-Host "The repository `"$($rep.Name)`" has clean working tree. Skipping..." && Write-Host ""
+				Write-Host "The repository has clean working tree. Skip..." && Write-Host ""
 				RETURN
 			}
 			
 			IF ( -not $rep.AutoGitEnabled ) {
-				Write-Host "The repository `"$($rep.Name)`" doesn't have `".autogit`" file in `".git`" directory."
+				Write-Host "The repository doesn't have .autogit file in .git directory. " -NoNewLine
+				IF ( -not $Force ) { Write-Host "Create it?" }
 				IF ( $Force -or -not ( Set-LocalRepository CreateAutogit $Path ) ) { 
-					Write-Host "Skipping $($rep.Name)..." && Write-Host ""
+					Write-Host "Skip..." && Write-Host ""
 					RETURN
 				} 
 				Write-Host ""			
 			}
 
 			IF ( ( -not $rep.GitignoreExists ) -and ( -not $Force ) ) {
-				Write-Host "The repository `"$($rep.Name)`" does not contain a `".gitignore`" file:"
+				Write-Host "The repository does not contain a .gitignore file:"
 				Get-DirStats $Path
 			}
 
 			$result = Set-LocalRepository Commit $Path -Force:$Force
 			$result
 			IF ( -not $result ) {
-				Write-Host "Skipping `"$($rep.Name)`"..." && Write-Host ""
+				Write-Host "Skip..." && Write-Host ""
 				RETURN
 			}
 
@@ -177,26 +195,17 @@ FUNCTION Set-LocalRepository {
 			RETURN
 		}
 
-		"UploadAll" { 
+		"PrepareUploadAll" { 
 			Write-Host "Commiting changes in local repositories:"
-			Get-DirStats $Path
+			Get-DirStats $Path -Directory
 			FOREACH ( $folder in Get-ChildItem $Path -Directory -Force ) {
-				Set-LocalRepository Upload $folder -Force:$Force
+				Set-LocalRepository PrepareUpload $folder -Force:$Force
 			}
 			RETURN
 		}
 
-		"Commit" {
-			$expression = "cd ${Path} && git add . && git commit -m `"auto-commit`" && cd ${location}"
-			$operation = "Commit all changes in local repository"
-		}
+		"Upload" {
 
-		"Delete" {
-			IF ( -not ( Test-Path "${Path}\.git" ) ) { 
-				RETURN "`"${Path}`" has no repository (`".git`" doesn't exists). Nothing to delete." 
-			}
-			$expression = "Remove-Item -Recurse -Force `"${Path}\.git`""
-			$operation = "Delete local repository (`".git`" directory)"
 		}
 
 		DEFAULT { RETURN "Wrong method: ${Method}" }
