@@ -110,14 +110,19 @@ FUNCTION Set-LocalRepository {
 
 		"StatusAll" { 
 			FOREACH ( $folder in Get-ChildItem $Path -Directory -Force ) {
-				Set-LocalRepository ShowStatus $folder
+				Set-LocalRepository Status $folder
 			}
 			RETURN
 		}
 
-		"EnableAutogit" {
+		"CreateAutogit" {
 			$expression = "New-Item ${Path}\.git\.autogit"
 			$operation = "Create `".autogit`" file in `".git`" directory"
+		}
+
+		"DeleteAutogit" {
+			$expression = "Remove-Item ${Path}\.git\.autogit"
+			$operation = "Delete `".autogit`" file from `".git`" directory"
 		}
 
 		"Upload" {
@@ -149,7 +154,7 @@ FUNCTION Set-LocalRepository {
 			
 			IF ( -not $rep.AutoGitEnabled ) {
 				Write-Host "The repository `"$($rep.Name)`" doesn't have `".autogit`" file in `".git`" directory."
-				IF ( $Force -or -not ( Set-LocalRepository EnableAutogit $Path ) ) { 
+				IF ( $Force -or -not ( Set-LocalRepository CreateAutogit $Path ) ) { 
 					Write-Host "Skipping $($rep.Name)..." && Write-Host ""
 					RETURN
 				} 
@@ -161,7 +166,7 @@ FUNCTION Set-LocalRepository {
 				Get-DirStats $Path
 			}
 
-			$result = Set-LocalRepository CommitAllChanges $Path -Force:$Force
+			$result = Set-LocalRepository Commit $Path -Force:$Force
 			$result
 			IF ( -not $result ) {
 				Write-Host "Skipping `"$($rep.Name)`"..." && Write-Host ""
@@ -181,7 +186,7 @@ FUNCTION Set-LocalRepository {
 			RETURN
 		}
 
-		"CommitAllChanges" {
+		"Commit" {
 			$expression = "cd ${Path} && git add . && git commit -m `"auto-commit`" && cd ${location}"
 			$operation = "Commit all changes in local repository"
 		}
