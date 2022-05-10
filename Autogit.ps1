@@ -8,12 +8,14 @@
 
 
 PARAM (
-	[SWITCH]$Remote,
 	[Parameter(Mandatory=$TRUE)][STRING]$Method,
 	$Path =(Get-Location),
-	[STRING]$Name,
-	[STRING]$Username,
-	[STRING]$Token,
+
+	[SWITCH]$Remote,
+		[STRING]$Name,
+		[STRING]$Username,
+		[STRING]$Token,
+
 	[SWITCH]$Force
 )
 
@@ -84,11 +86,6 @@ FUNCTION Set-LocalRepository {
 			RETURN
 		}
 
-		"Commit" {
-			$expression = "cd ${Path} && git add . && git commit -m `"auto-commit`" && cd ${location}"
-			$operation = "Commit all changes in local repository"
-		}
-
 		"Delete" {
 			IF ( -not ( Test-Path "${Path}\.git" ) ) { 
 				RETURN "`"${Path}`" has no repository (.git doesn't exists). Nothing to delete." 
@@ -139,12 +136,12 @@ FUNCTION Set-LocalRepository {
 			$operation = "Delete .autogit file from .git directory"
 		}
 
-		"PrepareUpload" {
+		"Commit" {
 			$rep = Set-LocalRepository Get $Path
 
 			IF ( $rep.GitRepositoryInitialized ) { Write-Host "[$($rep.Name)]" } 
 			ELSE { Write-Host "`"$($rep.Name)`"" }
-	
+
 			IF ( -not $rep ) { 
 				Write-Host  "Can't get information about repository"
 				RETURN
@@ -157,10 +154,7 @@ FUNCTION Set-LocalRepository {
 				}
 				$result = Set-LocalRepository Create $Path -Force:$Force
 				$result
-				IF ( -not $result ) { 
-					Write-Host "Skip..." && Write-Host ""
-					RETURN
-				}
+				IF ( -not $result ) { RETURN }
 				$rep = Set-LocalRepository Get $Path
 			}
 			
@@ -171,12 +165,16 @@ FUNCTION Set-LocalRepository {
 			
 			IF ( -not $rep.AutoGitEnabled ) {
 				Write-Host "The repository doesn't have .autogit file in .git directory. " -NoNewLine
-				IF ( -not $Force ) { Write-Host "Create it?" }
-				IF ( $Force -or -not ( Set-LocalRepository CreateAutogit $Path ) ) { 
+				IF ( -not $Force ) {
+					Write-Host "Create it?"
+					$result = Set-LocalRepository CreateAutogit $Path
+					$result
+					IF ( -not $result ) { RETURN }
+				}
+				ELSE {
 					Write-Host "Skip..." && Write-Host ""
 					RETURN
-				} 
-				Write-Host ""			
+				}
 			}
 
 			IF ( ( -not $rep.GitignoreExists ) -and ( -not $Force ) ) {
@@ -184,35 +182,32 @@ FUNCTION Set-LocalRepository {
 				Get-DirStats $Path
 			}
 
-			$result = Set-LocalRepository Commit $Path -Force:$Force
-			$result
-			IF ( -not $result ) {
-				Write-Host "Skip..." && Write-Host ""
-				RETURN
-			}
-
-			Write-Host ""
-			RETURN
+			$expression = "cd ${Path} && git add . && git commit -m `"auto-commit`" && Write-Host '' && cd ${location}"
+			$operation = "Commit all changes in local repository"
 		}
 
-		"PrepareUploadAll" { 
+		"CommitAll" { 
 			Write-Host "Commiting changes in local repositories:"
-			Get-DirStats $Path -Directory
+			Write-Host ""
 			FOREACH ( $folder in Get-ChildItem $Path -Directory -Force ) {
-				Set-LocalRepository PrepareUpload $folder -Force:$Force
+				Set-LocalRepository Commit $folder -Force:$Force
 			}
 			RETURN
 		}
 
 		"Upload" {
-
+			
 		}
 
 		DEFAULT { RETURN "Wrong method: ${Method}" }
 	}
 
 	IF ( $Force -or $PSCmdlet.ShouldProcess($Path, $operation) ) { Invoke-Expression $expression } 
-	ELSE { RETURN }
+	ELSE { 
+		Write-Host "Skip..." && Write-Host ""
+		RETURN
+	}
+	
 }
 
 
